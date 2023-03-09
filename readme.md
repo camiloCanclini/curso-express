@@ -317,3 +317,281 @@ Un ejemplo en código podría ser el siguiente:
   Sin embargo, si un cliente intenta ingresar a las 2 últimas rutas, entonces, por ejemplo, podríamos poner alguna tipo de función de autenticación que verifique las credenciales del cliente. Si este envía las credenciales en su petición, entonces podrá acceder a las rutas posteriores a esta verificación, de lo contrario, se le negará el acceso, y podríamos devolver algun mensaje de estado. Como por ejemplo: `HTTP 401: "Usuario No Autorizado"`.
 
 #### Tipos de Middlewares en Express
+
+* Middleware de nivel de aplicación
+* Middleware de nivel de direccionador
+* Middleware de manejo de errores
+* Middleware incorporado
+* Middleware de terceros
+
+#### Middleware Nivel de Aplicación
+
+Este tipo de middlewares son aquellos que se apoyan en los métodos de la instancia del objeto `app`, que hemos visto hasta ahora (`app.use()` y `app.METHOD()`).
+
+Con esto podriamos por ejemplo, ya no tan solo, escuchar cualquier **vía de acceso**(*Recordemos que las vías de acceso son los endpoints o rutas finales de nuestra aplicación*), sino escuchar vías de acceso especificas.
+
+```js
+app.use('/user/:id', function(req, res, next) {
+  console.log('Request URL:', req.originalUrl);
+  next();
+}, function (req, res, next) {
+  console.log('Request Type:', req.method);
+  next();
+});
+```
+
+En este código, el middleware escucha la ruta `/user/:id`, para cualquier método HTTP (GET, POST, PUT, DELETE). Cuando en las URL encontramos, los 2 puntos, en este caso, `:id`, quiere decir que esta es una **ruta de acceso de montaje opcional**.
+
+Las rutas de acceso de montaje opcional, por lo menos en Express, representan un acceso a un recurso específico, que se encuentre **montado de la vía de acceso que especificamos**, en este caso seria la via de acceso `/user/`. Por ejemplo, si utilizacemos `/products/:idProduct`:
+
+```bash
+/products/123
+
+/products/423
+
+/products/970
+```
+
+En este caso estariamos **accediendo directamente** a los productos pasando su ID a la aplicación. Esto es parecido a usar **parametros en la url**, que es cuando usamos la siguiente forma: `/products?id=324`. Si bien realizan lo mismo, la diferencia es que con el primer método **accedemos directamente al recurso**, mientras que en el segundo, nuestra API, internamente, **debe realizar una consulta**.
+
+En Express, tenemos los `router handlers` que son las funciones que se ejecutan una vez que se solicita una determinada ruta.
+
+```app.get(RUTA,HANDLER())```
+
+Hasta ahora hemos visto vias de acceso con una sola callback que actua como manejador, pero si estamos hablando de un middleware, este nos permite poner mas callbacks como manejadores de ruta. El detalle aqui es que debemos utilizar `next()` para pasar al siguiente HANDLER o manejador, como se muestra en el siguiente ejemplo.
+
+```js
+app.get('/user/:id', function (req, res, next) {
+  console.log('ID:', req.params.id);
+  next();
+}, function (req, res, next) {
+  res.send('User Info');
+});
+```
+
+En ese caso tenemos, una via de acceso con dos manejadores, en los cuales, el primero muestra por consola el id del recurso solicitado, y el segundo le devuelve la información al usuario.
+
+Aunque, también podriamos tener el caso en el cual tengamos 2 rutas que escuchen a la misma vía de acceso:
+
+```js
+app.get('/user/:id', function (req, res, next) {
+  console.log('ID:', req.params.id);
+  next();
+}, function (req, res, next) {
+  res.send('User Info');
+});
+
+// handler for the /user/:id path, which prints the user ID
+app.get('/user/:id', function (req, res, next) {
+  res.end(req.params.id);
+});
+```
+
+En este caso, la segunda ruta no funcionará. Esto se debe a que como la primera ruta ya le envía una respuesta al usuario, ya se cerraría el ciclo de request/response. En otras palabras, el servidor ya respondió a la request, por ende, no es necesario verficar las siguientes rutas.
+
+Si por alguna razón, quisieramos forzar que el programa siga con la proxima ruta, podriamos pasar como argumento a la función `next()` la palabra 'route', quedandonos `next('route')`. Vease el siguiente código:
+
+```js
+app.get('/user/:id', function (req, res, next) {
+  console.log('ID:', req.params.id);
+  next();
+}, function (req, res, next) {
+  res.send('User Info');
+  next('route')
+});
+
+// handler for the /user/:id path, which prints the user ID
+app.get('/user/:id', function (req, res, next) {
+  res.end(req.params.id);
+});
+```
+
+Este codigo realizaría lo mismo que el anterior, con la diferencia de que, además, pasaríamos por la segunda ruta y le devolveriamos al cliente el id del recurso que solicitó.
+
+#### Middleware Nivel Direccionador
+
+Cuando hablamos de direccionador, nos referimos a un objeto el cual tiene la capacidad de redireccionar el flujo de información de manera eficiente y ordenada, lo que se conoce como un **Router**.
+
+Cuando hablamos de router, no nos referimos al router de la vida real, que se usa para las redes informaticas (El cual comparte la definición dadá anteriormente), sino que nos estamos refiriendo a la instancia de la clase `express.Router()`.
+
+Podemos ver a este objeto como, una subaplicación dentro de nuestro servidor, el cual administra una serie de rutas, y que además, también acepta los métodos `router.use()` y `router.METHOD()`.
+
+Funciona, exactamente igual que `app`, la unica diferencia es que este actua de "agrupador" o "divisor" dentro del servidor. Este nos permite modularizar el hecho de manejar las rutas de la aplicación. Por ejemplo, podriamos crear un script que exporte el objeto `routerUsuario`, y que a su vez este maneje las rutas de los usuarios que tengan un id. De esta forma podemos separar las "rutas publicas", de las "rutas de usuarios". Vease el siguiente ejemplo:
+
+```js
+
+```
+
+#### Middleware para Manejo de errores
+
+> El middleware de manejo de errores siempre utiliza cuatro argumentos. Debe proporcionar cuatro argumentos para identificarlo como una función de middleware de manejo de errores. Aunque no necesite utilizar el objeto next, debe especificarlo para mantener la firma. De lo contrario, el objeto next se interpretará como middleware normal y no podrá manejar errores.
+
+```js
+app.use(function(err, req, res, next) {
+  console.error(err.stack);
+  res.status(500).send('Something broke!');
+});
+```
+
+En Express viene incluido lo que se conoce como un **manejador de errores predeterminado**, el cual, simplemente, imprime el error en la consola y envía una respuesta de error con un código de estado 500 y un mensaje de texto "Internal Server Error".
+
+Si bien este ***manejador de errores predeterminado*** es útil para el desarrollo y la depuración, no es la mejor opción para un entorno de producción. Esto debido a que una persona con experiencia podria usar esta información de depuración para vulnerar nuestro servicio. Por eso siempre es recomendable tener un manejador de errores "personalizado".
+
+Los manejadores de errores en Express funcionan de una manera muy sencilla, ya que, se basan en el funcionamiento de los middlewares que venimos viendo. Una de las diferencias, como dijimos, es que poseen un argumento `err`, que se pasa el inicio de la función. Pero no es la única característica.
+
+Otra implementación que podemos realizar es que hacer uso de la función `next()` tanto si es, un middleware o una "ruta normal", para pasar el error al **siguiente manejador de errores**. Ya que, esta función tambien admite como argumento una instancia del objeto `error`. Por ejemplo:
+
+```js
+app.get('/usuario/:id', function(req, res, next) {
+    var id = req.params.id;
+    if (isNaN(id)) {
+      var err = new Error('No ID provided');
+      err.status = 400;
+      return next(err);
+    }
+    res.send('hola')
+  });
+```
+
+En este código lo que hace el middleware es verificar si el `id` entregado como parametro para la url `/usuario`, no es un número, si esta condición devuelve verdadero(o sea, que no es un número), entonces se "devuelve" un objeto `err`. Esto permite 2 cosas:
+
+1. Ninguna otra ruta o middleware normal continuará con el pedido
+
+2. Tan solo un manejador de errores tomara el error, y lo manejará, quedando:
+
+```js
+const express = require('express');
+
+const app = express();
+
+app.get('/usuario/:id', function(req, res, next) {
+    var id = req.params.id;
+    if (isNaN(id)) {
+      var err = new Error('No ID provided');
+      err.status = 400;
+      return next(err);
+    }
+    res.send('hola')
+  });
+  app.use(function (err, req, res, next) {
+    console.error(err.stack);
+    res.status(500).send('Algo salió mal!');
+  });
+app.listen(3000,()=>{
+    console.log('La aplicación esta escuchando en el puerto: 3000');
+});
+```
+
+#### Middleware Incorporado
+
+En express vienen incluidos algunos middlewares que tambien podemos utilizar. Algunos de los middlewares que este incorpora son:
+
+* `express.json()`: Este middleware se utiliza para analizar el cuerpo de una solicitud HTTP que está en formato JSON. Con este middleware, podemos acceder a los datos enviados en una solicitud JSON en el objeto req.body.
+
+* `express.urlencoded()`: Este middleware se utiliza para analizar el cuerpo de una solicitud HTTP que está codificada en URL. Con este middleware, podemos acceder a los datos enviados en una solicitud codificada en URL en el objeto req.body.
+
+* `express.static()`: Como se mencionó anteriormente, este middleware se utiliza para servir archivos estáticos, como imágenes, archivos HTML, archivos CSS, archivos JavaScript, etc.
+
+* `morgan`: Este middleware se utiliza para registrar las solicitudes HTTP y las respuestas en la consola del servidor. Proporciona información detallada sobre cada solicitud, como la URL solicitada, el código de estado de la respuesta, el tiempo de respuesta, etc.
+
+* `cors`: Este middleware se utiliza para permitir el acceso a recursos de origen cruzado. Con este middleware, podemos configurar la política de CORS (Cross-Origin Resource Sharing) para permitir que los recursos de una aplicación web se compartan con otros dominios.
+
+* `helmet`: Este middleware se utiliza para mejorar la seguridad de una aplicación web configurando encabezados HTTP adecuados. Con este middleware, podemos configurar encabezados como Content-Security-Policy, X-XSS-Protection, X-Frame-Options, etc. para mejorar la seguridad de la aplicación.
+
+* `cookie-parser`: Este middleware se utiliza para analizar y establecer cookies en la solicitud y la respuesta. Con este middleware, podemos acceder a las cookies enviadas por el cliente en el objeto req.cookies y establecer cookies en la respuesta utilizando la función res.cookie().
+
+Para utilizar cada uno de estos middlewares, tan solo basta con utilicemos el método `app.use(middleware)`, visto anteriormente:
+
+```js
+app.use(express.static('public'));
+app.use(express.json());
+app.use(express.morgan());
+```
+
+Para ver en detalle cada uno vea la documentación de cada módulo. Y si, cada uno de estos middlewares es un módulo separado, que si bien estan dentro de express, este solo los incorpora, pero pueden ser utilizados por otros frameworks.
+
+#### middlewares de terceros
+
+Por otro lado, también podemos optar por utilizar middlewares de terceros, por ejemplo, podriamos instalar el módulo `coockie-parser` con `npm install cookie-parser` e importarlo de la siguiente manera:
+
+```js
+var express = require('express');
+var app = express();
+var cookieParser = require('cookie-parser');
+
+// load the cookie-parsing middleware
+app.use(cookieParser());
+```
+
+### Motores de Plantillas (template engines)
+
+En el curso de NodeJs vimos en profundida que son los motores de plantilla, asi que para no entrar en muchos detalles diremos que: Un motor de plantillas es un programa que pre-procesa una plantilla html, a la cual, podemos incluirle, parámetros y lógica (loops y condicionales de programación). Este nos permite procesar la información que le devolveremos al usuario antes de entregarsela.
+
+![templateEngine](https://studysection.com/blog/wp-content/uploads/2021/09/template-page.png)
+
+Para que Express pueda representar archivos de plantilla, deben establecerse los siguientes valores de aplicación:
+
+* views, el directorio donde se encuentran los archivos de plantilla. Ejemplo:
+
+```js
+app.set('views', './views')
+```
+
+* view engine, el motor de plantilla que se utiliza. Ejemplo:
+
+```js
+app.set('view engine', 'pug')
+```
+
+Veremos como instalar EJS, en Express:
+
+1. Tipeamos en la consola: `npm install ejs --save`
+
+2. Una vez instalado, creamos el siguiente script:
+
+    ```js
+    const express = require('express');
+
+    const app = express();
+    
+    app.set('views', './templates'); // Indicamos la carpeta que guarda las plantillas
+
+    app.set('view engine', 'ejs'); // Configuración de EJS (Motor de plantillas)
+
+    app.get('/', function(req, res) {
+        res.render('index', { title: 'Mi sitio web', message: '¡Hola mundo!' });
+    });
+
+    app.listen(3000,()=>{
+        console.log('La aplicación esta escuchando en el puerto: 3000');
+    });
+    ```
+
+3. Ahora debemos crear el archivo `index.ejs` que renderiza ejs, con `res.render()`, para eso primero debemos crear el directorio `/views/` y adentro guardar el siguiente archivo
+
+      index.ejs
+
+      ```html
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta http-equiv="X-UA-Compatible" content="IE=edge">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title><%= title %></title>
+      </head>
+      <body>
+          <h1><%= message %></h1>
+      </body>
+      </html>
+      ```
+
+4. Listo! Ahora solo resataría iniciar el servidor y visitar la url: `http://localhost:3000/`.
+
+## Bases de Datos con Express
+
+A la hora de integrar bases de datos con Express, cambian las formas dependiendo de la base, si necesita información de las bases de datos soportadas por Express y de como se integran visite:
+
+[https://expressjs.com/es/guide/database-integration.html](https://expressjs.com/es/guide/database-integration.html)
+
+![DBs](https://dbaexperts.tech/wp/wp-content/uploads/2022/02/NoSQL4.png)
